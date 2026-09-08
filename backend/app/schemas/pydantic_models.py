@@ -33,11 +33,17 @@ class OTPVerifyRequest(BaseModel):
     email: EmailStr
     otp: str
 
+class ResendOTPRequest(BaseModel):
+    email: EmailStr
+
 class TokenResponse(BaseModel):
-    access_token: str
+    access_token: Optional[str] = ""
     token_type: str = "bearer"
     candidate: Optional[CandidateOut] = None
     role: str = "candidate"
+    requires_otp: bool = False
+    email: Optional[str] = None
+    message: Optional[str] = None
 
 # 3. Resume Schemas
 class ResumeOut(BaseModel):

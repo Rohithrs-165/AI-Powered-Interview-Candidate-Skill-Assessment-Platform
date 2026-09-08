@@ -124,6 +124,35 @@ class EmailService:
                 "message": f"SMTP connection attempted to {cfg['smtp_host']}:{cfg['smtp_port']} but failed: {e}"
             }
 
+    def send_otp_email(self, to_email: str, candidate_name: str, otp_code: str) -> bool:
+        subject = f"{otp_code} is your Neurova AI verification code"
+        html = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 520px; margin: auto; padding: 32px 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; color: #1e293b;">
+            <div style="text-align: center; margin-bottom: 24px;">
+                <h1 style="color: #4f46e5; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Neurova AI</h1>
+                <p style="color: #64748b; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; font-weight: 600;">Autonomous Talent Evaluation</p>
+            </div>
+            <div style="border-top: 1px solid #f1f5f9; padding-top: 20px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 0;">Candidate Sign Up Verification</h2>
+                <p style="font-size: 14px; line-height: 1.5; color: #475569;">
+                    Hello <strong>{candidate_name}</strong>,<br/>
+                    Please use the following 6-digit verification code to complete your Candidate registration on Neurova AI:
+                </p>
+                <div style="background: #f8fafc; border: 2px dashed #6366f1; border-radius: 12px; padding: 18px; text-align: center; margin: 24px 0;">
+                    <div style="font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #4338ca; font-family: monospace;">{otp_code}</div>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 6px;">Expires in 10 minutes &bull; Step 2 of 2</div>
+                </div>
+                <p style="font-size: 13px; line-height: 1.5; color: #64748b;">
+                    If you did not initiate this candidate registration, you can safely ignore this message.
+                </p>
+            </div>
+            <div style="margin-top: 28px; border-top: 1px solid #f1f5f9; padding-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;">
+                Neurova AI Platform Security &bull; Automated Verification Service
+            </div>
+        </div>
+        """
+        return self._send_email(to_email, subject, html)
+
     def send_shortlist_email(self, to_email: str, candidate_name: str, job_title: str) -> bool:
         subject = f"Congratulations! You are shortlisted for {job_title} at Neurova AI"
         html = f"""

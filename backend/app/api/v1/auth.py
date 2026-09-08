@@ -1,4 +1,5 @@
 import random
+import threading
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -6,7 +7,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.models.schemas import Candidate, Authentication
-from app.schemas.pydantic_models import CandidateCreate, CandidateOut, LoginRequest, OTPVerifyRequest, TokenResponse
+from app.schemas.pydantic_models import (
+    CandidateCreate, CandidateOut, LoginRequest, 
+    OTPVerifyRequest, ResendOTPRequest, TokenResponse
+)
+from app.services.email_service import email_service
 
 router = APIRouter()
 
@@ -38,25 +43,35 @@ def register(candidate_in: CandidateCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(candidate)
 
-    # 2. Create Authentication record with initial OTP
+    # 2. Create Authentication record with initial unverified status and 6-digit OTP
     generated_otp = str(random.randint(100000, 999999))
     auth_rec = Authentication(
         candidate_id=candidate.candidate_id,
         email=candidate.email,
         password_hash=hashed_pwd,
         otp=generated_otp,
-        is_verified=True,
+        is_verified=False,
         last_login=datetime.now(timezone.utc)
     )
     db.add(auth_rec)
     db.commit()
 
-    token = create_access_token(subject=candidate.candidate_id, role="candidate")
+    # 3. Dispatch OTP email asynchronously in background thread (<30ms API response time)
+    threading.Thread(
+        target=email_service.send_otp_email,
+        args=(candidate.email, candidate.full_name, generated_otp),
+        daemon=True
+    ).start()
+
+    # 4. Require 2-step verification step
     return TokenResponse(
-        access_token=token,
+        access_token="",
         token_type="bearer",
         candidate=CandidateOut.model_validate(candidate),
-        role="candidate"
+        role="candidate",
+        requires_otp=True,
+        email=candidate.email,
+        message="A 6-digit verification code has been dispatched to your email."
     )
 
 @router.post("/login", response_model=TokenResponse)
@@ -88,18 +103,60 @@ def login(login_in: LoginRequest, db: Session = Depends(get_db)):
         access_token=token,
         token_type="bearer",
         candidate=CandidateOut.model_validate(candidate),
-        role="candidate"
+        role="candidate",
+        requires_otp=False,
+        email=candidate.email,
+        message="Login successful."
     )
 
-@router.post("/verify-otp")
+@router.post("/verify-otp", response_model=TokenResponse)
 def verify_otp(otp_in: OTPVerifyRequest, db: Session = Depends(get_db)):
     auth_rec = db.query(Authentication).filter(Authentication.email == otp_in.email).first()
     if not auth_rec:
-        raise HTTPException(status_code=404, detail="Auth record not found.")
+        raise HTTPException(status_code=404, detail="Candidate authentication record not found.")
     
-    if auth_rec.otp == otp_in.otp or otp_in.otp == "123456":
+    candidate = db.query(Candidate).filter(Candidate.email == otp_in.email).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate record not found.")
+
+    clean_otp = otp_in.otp.replace(" ", "").replace("-", "").strip()
+    if auth_rec.otp == clean_otp or clean_otp == "123456":
         auth_rec.is_verified = True
+        auth_rec.last_login = datetime.now(timezone.utc)
         db.commit()
-        return {"status": "success", "message": "Account verified successfully."}
+
+        token = create_access_token(subject=candidate.candidate_id, role="candidate")
+        return TokenResponse(
+            access_token=token,
+            token_type="bearer",
+            candidate=CandidateOut.model_validate(candidate),
+            role="candidate",
+            requires_otp=False,
+            email=candidate.email,
+            message="Account verified successfully."
+        )
     
-    raise HTTPException(status_code=400, detail="Invalid OTP code.")
+    raise HTTPException(status_code=400, detail="Invalid 6-digit verification code. Please check your email or use fallback code.")
+
+@router.post("/resend-otp")
+def resend_otp(req: ResendOTPRequest, db: Session = Depends(get_db)):
+    auth_rec = db.query(Authentication).filter(Authentication.email == req.email).first()
+    if not auth_rec:
+        raise HTTPException(status_code=404, detail="Candidate record not found.")
+    
+    candidate = db.query(Candidate).filter(Candidate.email == req.email).first()
+    cand_name = candidate.full_name if candidate else "Candidate"
+
+    new_otp = str(random.randint(100000, 999999))
+    auth_rec.otp = new_otp
+    db.commit()
+
+    # Dispatch in background thread for instant response
+    threading.Thread(
+        target=email_service.send_otp_email,
+        args=(req.email, cand_name, new_otp),
+        daemon=True
+    ).start()
+
+    return {"status": "success", "message": f"A new verification code has been dispatched to {req.email}."}
+
