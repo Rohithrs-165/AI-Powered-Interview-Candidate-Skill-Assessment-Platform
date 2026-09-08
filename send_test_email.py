@@ -16,6 +16,11 @@ BACKEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend"
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+load_dotenv()
+
 from app.services.email_service import email_service
 
 def main():

@@ -1,5 +1,14 @@
 import os
+from dotenv import load_dotenv
 from pydantic import BaseModel
+
+# Automatically load environment variables from .env in backend or project root
+_curr_dir = os.path.dirname(os.path.abspath(__file__))
+_backend_dir = os.path.dirname(os.path.dirname(_curr_dir))
+_root_dir = os.path.dirname(_backend_dir)
+load_dotenv(os.path.join(_backend_dir, ".env"))
+load_dotenv(os.path.join(_root_dir, ".env"))
+load_dotenv()
 
 class Settings(BaseModel):
     PROJECT_NAME: str = "Neurova AI"
