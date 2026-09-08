@@ -1,0 +1,87 @@
+# ==========================================
+# Neurova AI — Git Ignore Configuration
+# ==========================================
+
+# 1. Environment & Secrets (NEVER COMMIT SENSITIVE SECRETS)
+.env
+.env.*
+!.env.example
+*.env
+
+# 2. Node.js & Next.js Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+frontend/*.tsbuildinfo
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# 3. Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# 4. Local Database & Binary Data
+backend/*.db
+backend/*.sqlite3
+backend/*.sqlite
+ai_interview.db
+*.db
+*.sqlite
+*.sqlite3
+
+# 5. Uploaded Candidate Files & Media
+backend/uploads/*
+!backend/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# 6. Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# 7. IDE & Operating System Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/

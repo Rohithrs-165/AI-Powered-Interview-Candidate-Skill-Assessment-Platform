@@ -1,0 +1,35 @@
+{
+    "dataset_source": "Kaggle (syedmharis/software-engineering-interview-questions-dataset)",
+    "dataset_size": 800,
+    "train_samples": 640,
+    "test_samples": 160,
+    "tier_classification_accuracy": 100.0,
+    "overall_r2_score_percentage": 96.89,
+    "regression_metrics": {
+        "accuracy_score": {
+            "r2_score": 0.9756,
+            "rmse": 3.8573,
+            "mae": 2.7069
+        },
+        "technical_score": {
+            "r2_score": 0.9707,
+            "rmse": 4.4738,
+            "mae": 3.0185
+        },
+        "relevance_score": {
+            "r2_score": 0.9663,
+            "rmse": 4.0823,
+            "mae": 2.7924
+        },
+        "communication_score": {
+            "r2_score": 0.9607,
+            "rmse": 4.0876,
+            "mae": 2.8609
+        },
+        "overall_score": {
+            "r2_score": 0.9713,
+            "rmse": 4.0512,
+            "mae": 2.7564
+        }
+    }
+}
