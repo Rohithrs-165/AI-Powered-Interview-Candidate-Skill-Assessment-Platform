@@ -1,0 +1,58 @@
+﻿services:
+  # 1. FastAPI Backend Web Service
+  - type: web
+    name: neurova-backend
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        fromDatabase:
+          name: neurova-postgres
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SENDER_EMAIL
+        value: talent@neurova.ai
+
+  # 2. Next.js 14 Frontend Web Application
+  - type: web
+    name: neurova-frontend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -- -p $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: 20.14.0
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: neurova-backend
+          property: host
+
+databases:
+  # 3. Managed PostgreSQL Database (Free Tier)
+  - name: neurova-postgres
+    databaseName: neurova_ai_db
+    user: neurova_user
+    plan: free
+    region: oregon
