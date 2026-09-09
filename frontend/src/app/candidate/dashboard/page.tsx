@@ -94,8 +94,9 @@ export default function CandidateHomePage() {
       // Reload applications
       const updatedApps = await api.getMyApplications(candidateId).catch(() => []);
       setApplications(updatedApps);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to apply:', err);
+      alert(err.message || 'Could not submit application. Please try again.');
     } finally {
       setApplyingJobId(null);
     }

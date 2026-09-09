@@ -46,7 +46,8 @@ def apply_for_job(req: ApplicationSubmitRequest, db: Session = Depends(get_db)):
     skills_text = analysis.skills if analysis and analysis.skills else "Python, FastAPI, Next.js, PostgreSQL"
     summary_text = analysis.summary if analysis and analysis.summary else "Full Stack Software Engineer"
 
-    resume = db.query(Resume).filter(Resume.candidate_id == req.candidate_id).order_by(Resume.created_at.desc()).first()
+    # Fix: Resume table does not have created_at, fetch first matching resume
+    resume = db.query(Resume).filter(Resume.candidate_id == req.candidate_id).first()
     resume_text = resume.extracted_text if resume and resume.extracted_text else ""
 
     candidate_data = {
@@ -88,20 +89,20 @@ def apply_for_job(req: ApplicationSubmitRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(app)
 
-    # Real-Time Email Triggers per Blueprint
+    # Real-Time Non-Blocking Background Email Triggers
+    import threading
     if is_shortlisted:
-        email_service.send_shortlist_email(
-            to_email=candidate.email,
-            candidate_name=candidate.full_name,
-            job_title=job.job_title
-        )
+        threading.Thread(
+            target=email_service.send_shortlist_email,
+            args=(candidate.email, candidate.full_name, job.job_title),
+            daemon=True
+        ).start()
     else:
-        email_service.send_initial_rejection_email(
-            to_email=candidate.email,
-            candidate_name=candidate.full_name,
-            job_title=job.job_title,
-            reason=match_result.get("reasoning", "")
-        )
+        threading.Thread(
+            target=email_service.send_initial_rejection_email,
+            args=(candidate.email, candidate.full_name, job.job_title, match_result.get("reasoning", "")),
+            daemon=True
+        ).start()
 
     return {
         "status": "success",

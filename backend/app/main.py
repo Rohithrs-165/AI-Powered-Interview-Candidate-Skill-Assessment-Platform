@@ -71,6 +71,11 @@ def get_ml_metrics():
         "dataset_size": 800
     }
 
+@app.get("/health", tags=["Health"])
+@app.get(f"{settings.API_V1_STR}/health", tags=["Health"])
+def health():
+    return {"status": "ok", "platform": settings.PROJECT_NAME}
+
 @app.get("/")
 def root():
     return {
