@@ -193,7 +193,28 @@ python -m unittest tests/test_qa_stress.py
 
 ## 🚢 Production Deployment
 
-### Vercel (Frontend) + Render / Railway (Backend)
+### Option 1: Railway All-in-One (Recommended)
+Deploy Frontend, Backend, and PostgreSQL in a single unified Railway project:
+
+1. **Create PostgreSQL**:
+   - In [Railway.app](https://railway.app), create a **New Project** -> Select **Provision PostgreSQL**.
+2. **Deploy Backend**:
+   - In the same project, click **+ New** -> **GitHub Repo** -> select this repository.
+   - Go to **Settings** -> set **Root Directory**: `backend`.
+   - Go to **Variables** -> add:
+     - `DATABASE_URL`: `${{Postgres.DATABASE_URL}}`
+     - `SECRET_KEY`: `your-random-64-character-jwt-secret-key`
+     - `GEMINI_API_KEY`: *(your Google AI Studio key)*
+     - `SMTP_USER` & `SMTP_PASSWORD`: *(optional for live email)*
+   - In **Settings** -> **Networking** -> click **Generate Domain** (e.g. `https://neurova-backend.up.railway.app`).
+3. **Deploy Frontend**:
+   - In the same project, click **+ New** -> **GitHub Repo** -> select this repository again.
+   - Go to **Settings** -> set **Root Directory**: `frontend`.
+   - Go to **Variables** -> add:
+     - `NEXT_PUBLIC_API_URL`: `https://<your-backend-railway-domain>/api/v1`
+   - In **Settings** -> **Networking** -> click **Generate Domain** (e.g. `https://neurova-app.up.railway.app`).
+
+### Option 2: Vercel (Frontend) + Render / Railway (Backend)
 1. **Frontend**: Import the `frontend` folder into [Vercel](https://vercel.com). Set `NEXT_PUBLIC_API_URL` to your production backend URL.
 2. **Backend**: Deploy the `backend` folder onto [Render](https://render.com) or [Railway](https://railway.app) using the included `backend/Dockerfile` and attach a managed PostgreSQL database.
 
