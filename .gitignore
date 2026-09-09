@@ -85,3 +85,5 @@ coverage.xml
 Thumbs.db
 desktop.ini
 $RECYCLE.BIN/
+
+.github/
