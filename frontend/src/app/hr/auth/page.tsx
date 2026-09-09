@@ -35,10 +35,7 @@ export default function HRAuthPage() {
     }
   };
 
-  const fillDemoCreds = () => {
-    setEmail('hr@neurova.ai');
-    setPassword('admin123');
-  };
+
 
   return (
     <div className="max-w-md mx-auto py-12 space-y-6">
@@ -113,19 +110,7 @@ export default function HRAuthPage() {
           </button>
         </form>
 
-        {/* Quick Demo Credentials Auto-Fill */}
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-          <span>Seeded HR Account:</span>
-          <button
-            type="button"
-            onClick={fillDemoCreds}
-            className="font-mono text-indigo-600 hover:text-indigo-700 font-semibold"
-          >
-            Auto-fill (hr@neurova.ai / admin123)
-          </button>
-        </div>
-
-        <div className="text-center pt-1">
+        <div className="text-center pt-2">
           <Link
             href="/candidate/auth"
             className="text-xs text-slate-500 hover:text-indigo-600 font-medium transition-colors"

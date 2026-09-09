@@ -338,19 +338,7 @@ export default function AuthPage() {
                 </button>
               </div>
 
-              {/* Fast Developer / Demo Master Fallback Hint */}
-              <div className="mt-3 pt-3 border-t border-slate-100 text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtpCode('123456');
-                    handleVerifyOtp('123456');
-                  }}
-                  className="text-[11px] text-slate-400 hover:text-indigo-600 underline"
-                >
-                  Quick test? Click here to autofill fallback code (123456)
-                </button>
-              </div>
+
             </div>
           </div>
         ) : (
@@ -534,7 +522,7 @@ export default function AuthPage() {
           </form>
         )}
 
-        <div className="text-center pt-2 space-y-2">
+        <div className="text-center pt-2">
           <button
             onClick={() => {
               setIsRegister(!isRegister);
@@ -542,48 +530,10 @@ export default function AuthPage() {
               setOtpCode('');
               setError('');
             }}
-            className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold"
+            className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold transition-colors"
           >
             {isRegister ? 'Already registered? Sign In' : 'New candidate? Create an Account (Sign Up)'}
           </button>
-
-          {!isRegister && (
-            <div className="pt-2 border-t border-slate-100">
-              <p className="text-[11px] font-semibold text-slate-400 mb-1.5">Quick Demo Logins (Password: Password123!):</p>
-              <div className="flex flex-wrap justify-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('rohith.rs@neurova.ai');
-                    setPassword('Password123!');
-                  }}
-                  className="px-2 py-1 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-[10px] font-medium text-slate-600 transition-colors"
-                >
-                  Rohith R S (AI Eng)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('elena.rostova@techmail.io');
-                    setPassword('Password123!');
-                  }}
-                  className="px-2 py-1 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-[10px] font-medium text-slate-600 transition-colors"
-                >
-                  Elena Rostova (Backend)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('marcus.chen@clouddev.org');
-                    setPassword('Password123!');
-                  }}
-                  className="px-2 py-1 rounded bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-[10px] font-medium text-slate-600 transition-colors"
-                >
-                  Marcus Chen (Cloud)
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
