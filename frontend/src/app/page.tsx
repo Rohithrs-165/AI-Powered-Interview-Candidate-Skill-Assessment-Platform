@@ -21,7 +21,7 @@ export default function HomePage() {
         </h1>
 
         <p className="text-lg text-slate-700 max-w-2xl mx-auto leading-relaxed font-medium">
-          A cohesive recruitment product built with Next.js, Tailwind CSS, FastAPI, PostgreSQL, and Gemini AI. Delivering resume matching, a 55-minute multi-section assessment, and an 18-question adaptive interview.
+          Next-generation AI recruitment platform delivering automated resume matching, intelligent multi-skill assessments, and adaptive video interviews with real-time analytics.
         </p>
 
         {/* Portals Entrance Cards — Clear Auth Gateways */}
@@ -81,9 +81,6 @@ export default function HomePage() {
                 <span>HR Recruiter Sign In</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
-              <div className="py-2 text-center text-[11px] text-slate-400 font-mono">
-                Seeded: hr@neurova.ai / admin123
-              </div>
             </div>
           </div>
         </div>
