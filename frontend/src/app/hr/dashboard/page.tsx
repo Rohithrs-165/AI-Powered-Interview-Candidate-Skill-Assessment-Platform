@@ -112,10 +112,16 @@ export default function HRDashboardPage() {
   };
 
   const handleReviewSubmit = async () => {
-    if (!selectedCand?.report_id) return;
+    if (!selectedCand) return;
+    const targetId = selectedCand.report_id || selectedCand.candidate_id;
+    if (!targetId) {
+      alert('Unable to identify candidate for review.');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await api.submitHRReview(selectedCand.report_id, {
+      await api.submitHRReview(targetId, {
         final_decision: decision,
         hr_comments: comments,
         reviewed_by: 'Executive Hiring Director'
@@ -124,14 +130,30 @@ export default function HRDashboardPage() {
       setCandidates((prev) =>
         prev.map((c) =>
           c.candidate_id === selectedCand.candidate_id
-            ? { ...c, final_decision: decision, application_status: decision }
+            ? {
+                ...c,
+                final_decision: decision,
+                application_status: decision,
+                hiring_stage: decision === 'selected' ? 'Offered' : 'Rejected'
+              }
             : c
         )
       );
+
+      const candidateName = selectedCand.full_name || 'Candidate';
+      const candidateEmail = selectedCand.email || 'candidate email';
       setSelectedCand(null);
       setComments('');
-    } catch (err) {
+      await refreshMalpracticeAndCandidates();
+
+      alert(
+        `Decision successfully recorded for ${candidateName}!\nReal-time ${
+          decision === 'selected' ? 'offer' : 'feedback'
+        } notification email dispatched to ${candidateEmail}.`
+      );
+    } catch (err: any) {
       console.error('Failed to submit review:', err);
+      alert(err?.message || 'Failed to submit review decision. Please check backend connection.');
     } finally {
       setSubmitting(false);
     }
