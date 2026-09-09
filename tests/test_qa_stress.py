@@ -10,34 +10,44 @@ import json
 import urllib.request
 import urllib.error
 
-# Add project root and ml_engine to sys.path
+# Add project root, backend, and ml_engine to sys.path
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+backend_dir = os.path.join(ROOT_DIR, "backend")
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 ML_DIR = os.path.join(ROOT_DIR, "ml_engine")
 if ML_DIR not in sys.path:
     sys.path.insert(0, ML_DIR)
 
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
 
 def api_call(endpoint: str, method: str = "GET", data: dict = None, token: str = None):
-    url = f"{BASE_URL}{endpoint}"
-    headers = {"Content-Type": "application/json"}
+    headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    body = json.dumps(data).encode() if data else None
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    url = f"/api/v1{endpoint}" if not endpoint.startswith("/api/v1") else endpoint
+    method = method.upper()
+    if method == "GET":
+        resp = client.get(url, headers=headers)
+    elif method == "POST":
+        resp = client.post(url, json=data, headers=headers)
+    elif method == "PUT":
+        resp = client.put(url, json=data, headers=headers)
+    elif method == "DELETE":
+        resp = client.delete(url, headers=headers)
+    else:
+        resp = client.request(method, url, json=data, headers=headers)
+
     try:
-        with urllib.request.urlopen(req) as resp:
-            content = resp.read().decode()
-            return resp.status, json.loads(content) if content else {}
-    except urllib.error.HTTPError as e:
-        err_body = e.read().decode()
-        e.close()
-        try:
-            return e.code, json.loads(err_body)
-        except Exception:
-            return e.code, {"detail": err_body}
+        content = resp.json()
+    except Exception:
+        content = resp.text
+    return resp.status_code, content
 
 class TestQAStress(unittest.TestCase):
     def test_01_auth_edge_cases(self):
