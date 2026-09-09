@@ -38,13 +38,11 @@ services:
     plan: free
     region: oregon
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start -- -p $PORT
     envVars:
       - key: NODE_VERSION
         value: 20.14.0
-      - key: NODE_OPTIONS
-        value: "--max-old-space-size=460"
       - key: NEXT_TELEMETRY_DISABLED
         value: "1"
       - key: NEXT_PUBLIC_API_URL
