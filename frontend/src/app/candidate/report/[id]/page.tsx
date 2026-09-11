@@ -48,7 +48,16 @@ export default function CandidateReportPage() {
         const res = await api.getInterviewSummary(targetId);
         setSummary(res);
       } catch (err) {
-        console.error('Failed to load combined report summary:', err);
+        console.warn('Failed to load combined report from server (checking local session summary):', err);
+        if (typeof window !== 'undefined') {
+          const localSummaryRaw = localStorage.getItem(`neurova_interview_summary_${targetId}`) ||
+                                  (storedCandId ? localStorage.getItem(`neurova_interview_summary_${storedCandId}`) : null);
+          if (localSummaryRaw) {
+            try {
+              setSummary(JSON.parse(localSummaryRaw));
+            } catch (e) {}
+          }
+        }
       } finally {
         setLoading(false);
       }
