@@ -182,6 +182,34 @@ class TestQAStress(unittest.TestCase):
         self.assertEqual(code, 404)
         print("  [PASS] Non-existent assessment session submission returns 404")
 
+        # 4. Test Python code execution endpoint: successful execution with stdout
+        code, run_res = api_call("/assessments/run-code", "POST", {
+            "code": "print('Neurova Python Execution Test: Success!')\nx = 10 * 5\nprint(f'Computed Result: {x}')",
+            "language": "python"
+        })
+        self.assertEqual(code, 200)
+        self.assertEqual(run_res["status"], "success")
+        self.assertEqual(run_res["exit_code"], 0)
+        self.assertIn("Neurova Python Execution Test: Success!", run_res["stdout"])
+        self.assertIn("Computed Result: 50", run_res["stdout"])
+        print(f"  [PASS] Python code execution succeeded (Duration: {run_res['execution_time_ms']} ms)")
+
+        # 5. Test Python code execution endpoint: syntax / runtime error output
+        code, err_res = api_call("/assessments/run-code", "POST", {
+            "code": "print(undefined_variable_name_test)",
+            "language": "python"
+        })
+        self.assertEqual(code, 200)
+        self.assertEqual(err_res["status"], "error")
+        self.assertIn("NameError", err_res["stderr"])
+        print("  [PASS] Python runtime error captured in stderr")
+
+        # 6. Test empty code execution
+        code, empty_res = api_call("/assessments/run-code", "POST", {"code": ""})
+        self.assertEqual(code, 200)
+        self.assertEqual(empty_res["status"], "empty")
+        print("  [PASS] Empty code handled cleanly")
+
     def test_05_malpractice_edges(self):
         print("\n[QA TEST 5] Testing Malpractice Log Edge Cases...")
         # 1. Log malpractice for non-existent interview

@@ -80,6 +80,8 @@ export const api = {
       }),
     }),
   getAssessmentStatus: (sessionId: string) => apiRequest(`/assessments/${sessionId}`),
+  runPythonCode: (data: { code: string; language?: string }) =>
+    apiRequest('/assessments/run-code', { method: 'POST', body: JSON.stringify(data) }),
   submitAssessment: (sessionId: string, answers: any) =>
     apiRequest(`/assessments/${sessionId}/submit`, { method: 'POST', body: JSON.stringify({ answers }) }),
   terminateAssessmentMalpractice: (sessionId: string, data?: any) =>

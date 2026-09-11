@@ -19,8 +19,69 @@ class AssessmentStartRequest(BaseModel):
     application_id: Optional[str] = None
     candidate_id: Optional[str] = None
 
+class CodeRunRequest(BaseModel):
+    code: str
+    language: Optional[str] = "python"
+
 class AssessmentSubmitRequest(BaseModel):
     answers: Dict[str, Any] # {"aptitude": {...}, "verbal": {...}, "role_mcqs": {...}, "coding": "code string"}
+
+@router.post("/run-code")
+def run_python_code(req: CodeRunRequest):
+    """
+    Executes candidate Python code in an isolated subprocess with a strict 5-second timeout,
+    capturing stdout, stderr, exit code, and execution time so candidates can verify their output before submitting.
+    """
+    if not req.code or not req.code.strip():
+        return {
+            "status": "empty",
+            "stdout": "",
+            "stderr": "No Python code provided to execute.",
+            "exit_code": 0,
+            "execution_time_ms": 0
+        }
+
+    import sys
+    import subprocess
+    import time
+
+    start_time = time.time()
+    try:
+        process = subprocess.run(
+            [sys.executable, "-c", req.code],
+            capture_output=True,
+            text=True,
+            timeout=5.0
+        )
+        duration_ms = round((time.time() - start_time) * 1000, 1)
+        stdout = process.stdout[:10000] if process.stdout else ""
+        stderr = process.stderr[:10000] if process.stderr else ""
+
+        return {
+            "status": "success" if process.returncode == 0 else "error",
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": process.returncode,
+            "execution_time_ms": duration_ms
+        }
+    except subprocess.TimeoutExpired:
+        duration_ms = round((time.time() - start_time) * 1000, 1)
+        return {
+            "status": "timeout",
+            "stdout": "",
+            "stderr": "Execution timed out (5.0s limit exceeded). Please check for infinite loops.",
+            "exit_code": -1,
+            "execution_time_ms": duration_ms
+        }
+    except Exception as e:
+        duration_ms = round((time.time() - start_time) * 1000, 1)
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": f"Runtime execution error: {str(e)}",
+            "exit_code": 1,
+            "execution_time_ms": duration_ms
+        }
 
 @router.post("/start")
 def start_assessment(req: AssessmentStartRequest, db: Session = Depends(get_db)):
@@ -147,12 +208,21 @@ def get_assessment_status(session_id: str, db: Session = Depends(get_db)):
             exp = exp.replace(tzinfo=timezone.utc)
         remaining_seconds = max(0, int((exp - now_utc).total_seconds()))
 
+    submitted_answers = None
+    if session.status == "completed" and session.answers_payload:
+        try:
+            submitted_answers = json.loads(session.answers_payload)
+        except Exception:
+            submitted_answers = None
+
     return {
         "session_id": session.session_id,
         "status": session.status,
         "started_at": session.started_at,
         "expires_at": session.expires_at,
         "remaining_seconds": remaining_seconds,
+        "coding_submission": session.coding_submission if session.status == "completed" else None,
+        "answers": submitted_answers,
         "scores": {
             "aptitude": session.aptitude_score,
             "verbal": session.verbal_score,

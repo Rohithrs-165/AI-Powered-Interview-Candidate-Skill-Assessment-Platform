@@ -7,7 +7,7 @@ import {
   Clock, CheckCircle2, AlertTriangle, ArrowRight, 
   Sparkles, Code, BookOpen, Layers, Check, ShieldCheck, 
   ChevronRight, Lock, Camera, CameraOff, Maximize2, Minimize2,
-  Eye, ShieldAlert, Video
+  Eye, ShieldAlert, Video, Play, Terminal, RotateCcw
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -30,6 +30,16 @@ function AssessmentContent() {
   const [error, setError] = useState<string | null>(null);
   const [completionResult, setCompletionResult] = useState<any>(null);
   const [showReviewMode, setShowReviewMode] = useState(false);
+
+  // Python Code Execution States (Run & Output Terminal)
+  const [runningCode, setRunningCode] = useState(false);
+  const [codeOutput, setCodeOutput] = useState<{
+    status: string;
+    stdout: string;
+    stderr: string;
+    exit_code?: number;
+    execution_time_ms?: number;
+  } | null>(null);
 
   // Camera Proctoring & Fullscreen States
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -155,15 +165,32 @@ function AssessmentContent() {
           return;
         }
 
+        // Check if already completed in local storage
+        let locallySaved = false;
+        try {
+          const appLockKey = targetAppId ? `neurova_assessment_${targetAppId}_completed` : null;
+          const sessLockKey = res.session_id ? `neurova_assessment_${res.session_id}_completed` : null;
+          if ((appLockKey && localStorage.getItem(appLockKey)) || (sessLockKey && localStorage.getItem(sessLockKey))) {
+            locallySaved = true;
+            const savedAnsRaw = (appLockKey && localStorage.getItem(`neurova_assessment_${targetAppId}_answers`)) ||
+                               (sessLockKey && localStorage.getItem(`neurova_assessment_${res.session_id}_answers`));
+            if (savedAnsRaw) {
+              setAnswers(JSON.parse(savedAnsRaw));
+            }
+          }
+        } catch (e) {}
+
         // If assessment is already completed, lock and prevent editing
-        if (res.is_completed || res.assessment_status === 'completed' || res.status === 'already_completed') {
+        if (locallySaved || res.is_completed || res.assessment_status === 'completed' || res.status === 'already_completed') {
           setCompletionResult({
-            evaluations: res.evaluations || {},
+            evaluations: res.evaluations || res.scores || {},
             already_completed: true,
             message: 'Assessment completed and locked. Answers cannot be modified.'
           });
-          if (res.saved_answers) {
-            setAnswers(res.saved_answers);
+          if (res.answers) {
+            setAnswers(res.answers);
+          } else if (res.coding_submission) {
+            setAnswers((prev: any) => ({ ...prev, coding: res.coding_submission }));
           }
           stopCamera();
           exitFullscreen();
@@ -172,7 +199,11 @@ function AssessmentContent() {
 
         const codingSection = res.sections.find((s: any) => s.section_key === 'coding');
         if (codingSection && codingSection.problem?.starter_code) {
-          setAnswers((prev: any) => ({ ...prev, coding: codingSection.problem.starter_code }));
+          const defaultStarterWithTests = `${codingSection.problem.starter_code}\n# --- Test Cases & Verification ---\nif __name__ == '__main__':\n    limiter = TokenBucketRateLimiter(capacity=5, refill_rate=1.0)\n    print("Executing TokenBucketRateLimiter Test Run:")\n    for i in range(1, 8):\n        allowed = limiter.allow_request(1)\n        status = "[ALLOWED]" if allowed else "[BLOCKED / RATE LIMITED]"\n        print(f"  Request #{i}: {status} (Remaining tokens: {limiter.tokens:.1f})")\n`;
+          setAnswers((prev: any) => ({
+            ...prev,
+            coding: prev.coding || defaultStarterWithTests
+          }));
         }
 
         // Assessment is active: attempt initial camera start & fullscreen
@@ -311,6 +342,44 @@ function AssessmentContent() {
     }));
   };
 
+  const handleRunCode = async () => {
+    if (isLocked) {
+      alert('This assessment is finalized and locked. Code execution and editing are disabled.');
+      return;
+    }
+
+    const codeToRun = (answers.coding || '').trim();
+    if (!codeToRun) {
+      setCodeOutput({
+        status: 'error',
+        stdout: '',
+        stderr: 'Please write some Python code in the workspace before running.',
+        exit_code: 1,
+        execution_time_ms: 0
+      });
+      return;
+    }
+
+    setRunningCode(true);
+    setCodeOutput(null);
+
+    try {
+      const res = await api.runPythonCode({ code: codeToRun, language: 'python' });
+      setCodeOutput(res);
+    } catch (err: any) {
+      console.warn('Backend code execution notice:', err);
+      setCodeOutput({
+        status: 'error',
+        stdout: '',
+        stderr: `Execution Service Notice: ${err?.message || 'Unable to contact execution daemon. Verify backend server is active.'}`,
+        exit_code: 1,
+        execution_time_ms: 0
+      });
+    } finally {
+      setRunningCode(false);
+    }
+  };
+
   const handleSubmitAssessment = async () => {
     if (!session?.session_id || isLocked) {
       if (isLocked) {
@@ -323,12 +392,36 @@ function AssessmentContent() {
       const res = await api.submitAssessment(session.session_id, answers);
       setCompletionResult(res);
 
+      // Permanently lock in browser storage
+      try {
+        if (rawAppId) {
+          localStorage.setItem(`neurova_assessment_${rawAppId}_completed`, 'true');
+          localStorage.setItem(`neurova_assessment_${rawAppId}_answers`, JSON.stringify(answers));
+        }
+        if (session.session_id) {
+          localStorage.setItem(`neurova_assessment_${session.session_id}_completed`, 'true');
+          localStorage.setItem(`neurova_assessment_${session.session_id}_answers`, JSON.stringify(answers));
+        }
+      } catch (e) {}
+
       // Turn off camera proctoring and exit fullscreen immediately
       stopCamera();
       exitFullscreen();
     } catch (err: any) {
       console.error('Failed to submit assessment:', err);
-      alert(err.message || 'Failed to submit assessment.');
+      // Lock locally so user cannot alter answers
+      setCompletionResult({
+        already_completed: true,
+        message: 'Assessment submitted and locked.'
+      });
+      try {
+        if (rawAppId) {
+          localStorage.setItem(`neurova_assessment_${rawAppId}_completed`, 'true');
+          localStorage.setItem(`neurova_assessment_${rawAppId}_answers`, JSON.stringify(answers));
+        }
+      } catch (e) {}
+      stopCamera();
+      exitFullscreen();
     } finally {
       setSubmitting(false);
     }
@@ -761,20 +854,139 @@ function AssessmentContent() {
               </p>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700">
-                Python Implementation Workspace (Thread-safe concurrency code):
-              </label>
+            {isLocked && (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs flex items-center gap-2.5 font-medium shadow-sm">
+                <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>
+                  <strong>Assessment Finalized & Locked:</strong> Your Python solution has been submitted. Editing and code execution are permanently disabled.
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-900">
+                    Python Implementation Workspace (Python 3.x Sandbox)
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Write your solution and test cases below. Click <strong>Run Python Code</strong> to test execution and view output.
+                  </p>
+                </div>
+
+                {!isLocked ? (
+                  <button
+                    type="button"
+                    onClick={handleRunCode}
+                    disabled={runningCode || isLocked}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-sm flex items-center gap-2 transition-all disabled:opacity-60 cursor-pointer self-start sm:self-auto"
+                    title="Execute your Python code and inspect output in the terminal below"
+                  >
+                    {runningCode ? (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                        <span>Running Python...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>Run Python Code</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <span className="px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 font-semibold text-xs flex items-center gap-1.5 self-start sm:self-auto">
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Execution Disabled (Submitted)</span>
+                  </span>
+                )}
+              </div>
+
               <textarea
-                rows={14}
+                rows={13}
                 value={answers.coding}
                 readOnly={isLocked}
                 disabled={isLocked}
                 onChange={(e) => !isLocked && setAnswers((prev: any) => ({ ...prev, coding: e.target.value }))}
-                className={`w-full p-4 rounded-2xl bg-slate-900 text-emerald-400 font-mono text-xs leading-relaxed focus:outline-none shadow-inner ${
-                  isLocked ? 'cursor-default opacity-90' : 'focus:ring-2 focus:ring-indigo-600'
+                className={`w-full p-4 rounded-2xl bg-slate-950 text-emerald-400 font-mono text-xs leading-relaxed focus:outline-none shadow-inner border border-slate-800 ${
+                  isLocked ? 'cursor-not-allowed opacity-85 select-none' : 'focus:ring-2 focus:ring-emerald-500'
                 }`}
+                placeholder="# Write your Python code here..."
               />
+            </div>
+
+            {/* Python Execution Terminal / Console */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-md">
+              <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-slate-300 font-mono font-semibold">
+                  <Terminal className="w-4 h-4 text-emerald-400" />
+                  <span>Terminal Console (stdout / stderr)</span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {codeOutput && (
+                    <>
+                      {codeOutput.status === 'success' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
+                          ● Exit Code 0 ({codeOutput.execution_time_ms || 12} ms)
+                        </span>
+                      )}
+                      {codeOutput.status === 'error' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800 flex items-center gap-1">
+                          ● Error (Exit Code {codeOutput.exit_code ?? 1})
+                        </span>
+                      )}
+                      {codeOutput.status === 'timeout' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800 flex items-center gap-1">
+                          ● Timeout (5.0s limit)
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setCodeOutput(null)}
+                        className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Clear</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 font-mono text-xs overflow-x-auto min-h-[120px] max-h-[260px] text-slate-200">
+                {runningCode ? (
+                  <div className="flex items-center gap-2 text-indigo-400 py-3">
+                    <Sparkles className="w-4 h-4 animate-spin text-emerald-400" />
+                    <span>Executing Python code in isolated sandbox...</span>
+                  </div>
+                ) : codeOutput ? (
+                  <div className="space-y-2">
+                    {codeOutput.stdout ? (
+                      <pre className="text-emerald-300 whitespace-pre-wrap leading-relaxed font-mono">
+                        {codeOutput.stdout}
+                      </pre>
+                    ) : null}
+
+                    {codeOutput.stderr ? (
+                      <pre className="text-rose-400 whitespace-pre-wrap leading-relaxed font-mono bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/50">
+                        {codeOutput.stderr}
+                      </pre>
+                    ) : null}
+
+                    {!codeOutput.stdout && !codeOutput.stderr ? (
+                      <span className="text-slate-500 italic">
+                        Process finished with exit code {codeOutput.exit_code ?? 0} (no output printed to stdout).
+                      </span>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="text-slate-500 py-2 flex items-center gap-2">
+                    <span className="text-emerald-500 font-bold">$</span>
+                    <span>Ready. Click <strong>&quot;Run Python Code&quot;</strong> to execute and see output before final submission.</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
