@@ -61,6 +61,7 @@ export const api = {
   getJobs: (statusFilter?: string) => apiRequest(`/jobs${statusFilter ? `?status_filter=${statusFilter}` : ''}`),
   createJob: (data: any) => apiRequest('/jobs', { method: 'POST', body: JSON.stringify(data) }),
   getJob: (jobId: string) => apiRequest(`/jobs/${jobId}`),
+  deleteJob: (jobId: string) => apiRequest(`/jobs/${jobId}`, { method: 'DELETE' }),
 
   // Applications & AI Matching
   applyJob: (data: { candidate_id: string; job_id: string }) =>

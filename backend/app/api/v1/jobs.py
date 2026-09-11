@@ -5,7 +5,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.schemas import JobOpening, CandidateApplication
+from app.models.schemas import JobOpening, CandidateApplication, AssessmentSession, Interview
 
 router = APIRouter()
 
@@ -130,3 +130,36 @@ def update_job_opening(job_id: str, req: JobUpdateRequest, db: Session = Depends
     db.commit()
     db.refresh(job)
     return {"status": "success", "job_id": job.job_id, "job_status": job.status}
+
+@router.delete("/{job_id}")
+def delete_job_opening(job_id: str, db: Session = Depends(get_db)):
+    job = db.query(JobOpening).filter(JobOpening.job_id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job opening not found.")
+
+    # 1. Cleanly delete linked candidate applications and their assessment sessions
+    apps = db.query(CandidateApplication).filter(CandidateApplication.job_id == job_id).all()
+    for app in apps:
+        sessions = db.query(AssessmentSession).filter(AssessmentSession.application_id == app.application_id).all()
+        for sess in sessions:
+            db.delete(sess)
+        db.delete(app)
+
+    # 2. Delete any direct assessment sessions on job_id
+    direct_sessions = db.query(AssessmentSession).filter(AssessmentSession.job_id == job_id).all()
+    for sess in direct_sessions:
+        db.delete(sess)
+
+    # 3. Detach interview records so candidate reports and history are preserved
+    interviews = db.query(Interview).filter(Interview.job_id == job_id).all()
+    for itv in interviews:
+        itv.job_id = None
+
+    db.delete(job)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Job opening '{job.job_title}' deleted successfully.",
+        "job_id": job_id
+    }

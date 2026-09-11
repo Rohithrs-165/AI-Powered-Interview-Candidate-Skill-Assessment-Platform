@@ -73,7 +73,7 @@ class TestQAStress(unittest.TestCase):
         print("  [PASS] Duplicate registration returns 400 with clear message")
 
     def test_02_job_edges(self):
-        print("\n[QA TEST 2] Testing Job Opening Edge Cases...")
+        print("\n[QA TEST 2] Testing Job Opening Edge Cases & Deletion...")
         # 1. Get non-existent job
         code, res = api_call("/jobs/non-existent-job-uuid-12345")
         self.assertEqual(code, 404)
@@ -85,8 +85,31 @@ class TestQAStress(unittest.TestCase):
         self.assertGreaterEqual(len(jobs), 1)
         print(f"  [PASS] Active jobs retrieved: {len(jobs)}")
 
+        # 3. Create job and verify it persists
+        code, create_res = api_call("/jobs", "POST", {
+            "job_title": "Temporary Test Position",
+            "job_description": "Validating persistent lifecycle until HR explicitly deletes.",
+            "required_skills": "Python, Testing",
+            "experience_min": 1.0,
+            "experience_max": 3.0
+        })
+        self.assertEqual(code, 201)
+        test_job_id = create_res["job"]["job_id"]
+        print("  [PASS] Job successfully created and persisted in database.")
+
+        # 4. Explicit HR Delete
+        code, del_res = api_call(f"/jobs/{test_job_id}", "DELETE")
+        self.assertEqual(code, 200)
+        self.assertEqual(del_res["status"], "success")
+        print("  [PASS] Job explicitly deleted by HR via DELETE endpoint.")
+
+        # 5. Verify deleted job is no longer retrievable
+        code, res = api_call(f"/jobs/{test_job_id}")
+        self.assertEqual(code, 404)
+        print("  [PASS] Deleted job verified absent (404).")
+
     def test_03_application_edges(self):
-        print("\n[QA TEST 3] Testing Candidate Application Edge Cases...")
+        print("\n[QA TEST 3] Testing Candidate Application Edge Cases & Withdrawal Guard...")
         # 1. Apply with invalid candidate ID
         code, res = api_call("/applications/apply", "POST", {
             "candidate_id": "invalid-candidate-id-999",
@@ -104,6 +127,38 @@ class TestQAStress(unittest.TestCase):
         })
         self.assertEqual(code, 404)
         print("  [PASS] Invalid job ID returns 404")
+
+        # 3. Test withdrawal lock for candidates who attended assessment
+        from app.models.schemas import CandidateApplication, JobOpening, Candidate
+        from app.core.database import SessionLocal
+        db = SessionLocal()
+        cand = db.query(Candidate).first()
+        job = db.query(JobOpening).first()
+        test_attended_app = CandidateApplication(
+            candidate_id=cand.candidate_id,
+            job_id=job.job_id,
+            application_status="assessment",
+            match_score=85.0,
+            match_status="shortlisted"
+        )
+        db.add(test_attended_app)
+        db.commit()
+        db.refresh(test_attended_app)
+        app_id = test_attended_app.application_id
+        db.close()
+
+        code, res = api_call(f"/applications/{app_id}", "DELETE")
+        self.assertEqual(code, 403)
+        self.assertTrue("cannot be withdrawn" in res.get("detail", "") or "cannot withdraw" in res.get("detail", ""))
+        print("  [PASS] Application locked with 403 Forbidden after attending assessment round.")
+
+        # Clean up test app
+        db = SessionLocal()
+        del_app = db.query(CandidateApplication).filter(CandidateApplication.application_id == app_id).first()
+        if del_app:
+            db.delete(del_app)
+            db.commit()
+        db.close()
 
     def test_04_assessment_edges(self):
         print("\n[QA TEST 4] Testing Assessment Edge Cases...")

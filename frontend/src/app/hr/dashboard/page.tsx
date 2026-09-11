@@ -66,9 +66,28 @@ export default function HRDashboardPage() {
           api.getJobs().catch(() => []),
           api.getAllMalpracticeIncidents().catch(() => [])
         ]);
+
+        // Merge persistent jobs from localStorage with backend jobs
+        let savedJobs: any[] = [];
+        try {
+          const raw = localStorage.getItem('neurova_persistent_jobs');
+          if (raw) savedJobs = JSON.parse(raw);
+        } catch (e) {}
+
+        const mergedMap = new Map<string, any>();
+        savedJobs.forEach((j) => { if (j && j.job_id) mergedMap.set(j.job_id, j); });
+        (jobList || []).forEach((j: any) => { if (j && j.job_id) mergedMap.set(j.job_id, j); });
+
+        const finalJobs = Array.from(mergedMap.values());
+        if (finalJobs.length > 0) {
+          try {
+            localStorage.setItem('neurova_persistent_jobs', JSON.stringify(finalJobs));
+          } catch (e) {}
+        }
+
         setCandidates(candList);
         setStats(statData);
-        setJobs(jobList);
+        setJobs(finalJobs.length > 0 ? finalJobs : (jobList || []));
         setMalpracticeIncidents(incidents);
       } catch (err) {
         console.error('Failed to load HR data:', err);
@@ -90,25 +109,85 @@ export default function HRDashboardPage() {
     e.preventDefault();
     if (!newJobTitle.trim()) return;
     setCreatingJob(true);
+
+    const tempJobId = `job-${Date.now()}`;
+    const newJobItem = {
+      job_id: tempJobId,
+      job_title: newJobTitle.trim(),
+      job_description: newJobDesc.trim(),
+      required_skills: newJobSkills.trim(),
+      experience_min: newJobExpMin,
+      experience_max: newJobExpMax,
+      department: "Engineering",
+      location: "Remote / Hybrid",
+      status: "active",
+      applicants_count: 0,
+      created_at: new Date().toISOString()
+    };
+
+    // Save immediately to local persistent storage so it is never lost
     try {
-      await api.createJob({
-        job_title: newJobTitle,
-        job_description: newJobDesc,
-        required_skills: newJobSkills,
+      const raw = localStorage.getItem('neurova_persistent_jobs');
+      const existing = raw ? JSON.parse(raw) : [];
+      const updated = [newJobItem, ...existing.filter((j: any) => j.job_title !== newJobItem.job_title)];
+      localStorage.setItem('neurova_persistent_jobs', JSON.stringify(updated));
+      setJobs(updated);
+    } catch (e) {
+      console.error('LocalStorage write error:', e);
+    }
+
+    try {
+      const res = await api.createJob({
+        job_title: newJobTitle.trim(),
+        job_description: newJobDesc.trim(),
+        required_skills: newJobSkills.trim(),
         experience_min: newJobExpMin,
         experience_max: newJobExpMax
       });
+
+      if (res?.job?.job_id) {
+        const raw = localStorage.getItem('neurova_persistent_jobs');
+        if (raw) {
+          const stored = JSON.parse(raw);
+          const synced = stored.map((j: any) => (j.job_id === tempJobId ? { ...j, ...res.job } : j));
+          localStorage.setItem('neurova_persistent_jobs', JSON.stringify(synced));
+          setJobs(synced);
+        }
+      }
+    } catch (err) {
+      console.warn('Backend job sync notice (persisted in browser storage):', err);
+    } finally {
       setShowCreateJobModal(false);
       setNewJobTitle('');
       setNewJobDesc('');
       setNewJobSkills('');
-      // Reload jobs
-      const updated = await api.getJobs().catch(() => []);
-      setJobs(updated);
-    } catch (err) {
-      console.error('Failed to create job:', err);
-    } finally {
       setCreatingJob(false);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string, jobTitle: string) => {
+    if (!confirm(`Are you sure you want to delete the job opening: "${jobTitle}"?\n\nOnce deleted by HR, it will be removed permanently.`)) {
+      return;
+    }
+
+    // 1. Remove from state immediately
+    setJobs((prev) => prev.filter((j) => j.job_id !== jobId));
+
+    // 2. Remove from localStorage
+    try {
+      const raw = localStorage.getItem('neurova_persistent_jobs');
+      if (raw) {
+        const stored = JSON.parse(raw);
+        const filtered = stored.filter((j: any) => j.job_id !== jobId);
+        localStorage.setItem('neurova_persistent_jobs', JSON.stringify(filtered));
+      }
+    } catch (e) {}
+
+    // 3. Delete from backend
+    try {
+      await api.deleteJob(jobId);
+    } catch (err) {
+      console.warn('Backend delete sync notice:', err);
     }
   };
 
@@ -399,17 +478,29 @@ export default function HRDashboardPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {jobs.map((job) => (
-            <div key={job.job_id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-900 text-sm">{job.job_title}</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[10px] uppercase">
-                  {job.status}
-                </span>
+            <div key={job.job_id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all space-y-2.5 text-xs shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="font-bold text-slate-900 text-sm block">{job.job_title}</span>
+                  <span className="text-[10px] text-slate-500">{job.department || 'Engineering'} • {job.location || 'Remote'}</span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[10px] uppercase">
+                    {job.status}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteJob(job.job_id, job.job_title)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition-colors"
+                    title="Permanently delete this job opening"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
               <p className="text-slate-600 leading-relaxed line-clamp-2">{job.job_description}</p>
-              <div className="text-[11px] text-slate-500 pt-1 flex items-center justify-between border-t border-slate-200/60 mt-2">
-                <span><strong>Skills:</strong> {job.required_skills}</span>
-                <span><strong>Exp:</strong> {job.experience_min}–{job.experience_max} yrs</span>
+              <div className="text-[11px] text-slate-500 pt-2 flex items-center justify-between border-t border-slate-200/60 mt-1">
+                <span className="truncate mr-2"><strong>Skills:</strong> {job.required_skills}</span>
+                <span className="shrink-0 font-medium"><strong>Exp:</strong> {job.experience_min}–{job.experience_max} yrs</span>
               </div>
             </div>
           ))}

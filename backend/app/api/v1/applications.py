@@ -166,8 +166,21 @@ def delete_application(application_id: str, db: Session = Depends(get_db)):
     if not app:
         raise HTTPException(status_code=404, detail="Application not found.")
 
-    # Cleanly remove any linked assessment session
+    # Guard: If candidate has joined/attended the first round of assessment, withdrawal is strictly prohibited
     session = db.query(AssessmentSession).filter(AssessmentSession.application_id == app.application_id).first()
+    if session and (session.status in ["in_progress", "completed"] or session.started_at is not None):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Application Locked: You have already joined and attended the first round of assessment. Applications cannot be withdrawn after assessment participation."
+        )
+
+    # Also check if application status has advanced to or beyond assessment
+    if app.application_status in ["assessment", "cleared_assessment", "interview", "hr_review", "selected", "offered", "completed"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Application Locked: You have already commenced or completed evaluation rounds for this opening. Applications cannot be withdrawn."
+        )
+
     if session:
         db.delete(session)
 
