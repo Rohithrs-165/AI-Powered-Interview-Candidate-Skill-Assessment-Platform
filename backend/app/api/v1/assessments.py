@@ -51,6 +51,20 @@ def start_assessment(req: AssessmentStartRequest, db: Session = Depends(get_db))
             detail="Assessment is locked. Only shortlisted candidates can access the 55-minute skill assessment."
         )
 
+    # GUARD: Malpractice Disqualification Check
+    cand = db.query(Candidate).filter(Candidate.candidate_id == app.candidate_id).first()
+    has_malpractice = (
+        (cand and cand.is_disqualified) or
+        db.query(MalpracticeLog).filter(MalpracticeLog.candidate_id == app.candidate_id).first() is not None or
+        db.query(Interview).filter(Interview.candidate_id == app.candidate_id, Interview.status == "malpractice").first() is not None or
+        db.query(AssessmentSession).filter(AssessmentSession.candidate_id == app.candidate_id, AssessmentSession.status == "malpractice").first() is not None
+    )
+    if has_malpractice:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: Candidate has been disqualified due to proctoring malpractice. You cannot take or retake this assessment."
+        )
+
     # Check for existing session
     session = db.query(AssessmentSession).filter(AssessmentSession.application_id == app.application_id).first()
     now_utc = datetime.now(timezone.utc)
@@ -233,6 +247,9 @@ def terminate_for_malpractice(session_id: str, req: Optional[MalpracticeTerminat
         db.flush()
 
     candidate = db.query(Candidate).filter(Candidate.candidate_id == session.candidate_id).first()
+    if candidate:
+        candidate.is_disqualified = True
+        candidate.disqualification_reason = "Disqualified: Exceeded 3 proctoring malpractice attempts during skill assessment."
     cand_name = candidate.full_name if candidate else "Candidate"
 
     # Log malpractice incident

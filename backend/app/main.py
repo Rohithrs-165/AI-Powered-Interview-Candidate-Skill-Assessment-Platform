@@ -26,6 +26,20 @@ def _ensure_schema_columns():
                             col_type = col.type.compile(engine.dialect)
                             conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}")
                             conn.commit()
+            elif engine.dialect.name == "postgresql":
+                for table_name, table in Base.metadata.tables.items():
+                    result = conn.exec_driver_sql(
+                        "SELECT column_name FROM information_schema.columns WHERE table_name = :tbl",
+                        {"tbl": table_name}
+                    )
+                    db_cols = {row[0] for row in result.fetchall()}
+                    if not db_cols:
+                        continue
+                    for col in table.columns:
+                        if col.name not in db_cols:
+                            col_type = col.type.compile(engine.dialect)
+                            conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {col.name} {col_type}")
+                            conn.commit()
     except Exception as err:
         print(f"[DATABASE] Schema auto-sync notice: {err}")
 

@@ -14,9 +14,7 @@ def get_current_candidate(
     token: Optional[str] = Depends(oauth2_scheme)
 ) -> Optional[Candidate]:
     if not token:
-        # For development/demo convenience, return first candidate if available
-        first_candidate = db.query(Candidate).first()
-        return first_candidate
+        return None
 
     payload = decode_token(token)
     if not payload or "sub" not in payload:

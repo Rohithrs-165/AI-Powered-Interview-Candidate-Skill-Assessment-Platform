@@ -25,6 +25,8 @@ class CandidateCreate(CandidateBase):
 
 class CandidateOut(CandidateBase):
     candidate_id: str
+    is_disqualified: Optional[bool] = False
+    disqualification_reason: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

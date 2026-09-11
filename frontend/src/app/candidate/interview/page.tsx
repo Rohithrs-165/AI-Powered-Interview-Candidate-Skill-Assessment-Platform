@@ -43,6 +43,8 @@ function InterviewContent() {
   const [violationsCount, setViolationsCount] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMalpracticeTerminated, setIsMalpracticeTerminated] = useState(false);
+  const [accessDeniedType, setAccessDeniedType] = useState<'malpractice' | 'already_attended' | null>(null);
+  const [accessDeniedMessage, setAccessDeniedMessage] = useState('');
 
   // References
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -116,8 +118,23 @@ function InterviewContent() {
         if (res.current_question?.audio_tts_url) {
           playAudio(res.current_question.audio_tts_url);
         }
-      } catch (err) {
-        console.error('Failed to start interview session:', err);
+      } catch (err: any) {
+        console.warn('Interview session notice:', err);
+        const msg = err.message || '';
+        const lower = msg.toLowerCase();
+        if (lower.includes('malpractice') || lower.includes('disqualified')) {
+          setAccessDeniedType('malpractice');
+          setAccessDeniedMessage(msg);
+          stopCamera();
+          exitFullscreen();
+        } else if (lower.includes('already attended') || lower.includes('completed') || lower.includes('re-attempts')) {
+          setAccessDeniedType('already_attended');
+          setAccessDeniedMessage(msg);
+          stopCamera();
+          exitFullscreen();
+        } else {
+          setAccessDeniedMessage(msg || 'Unable to connect to interview session.');
+        }
       } finally {
         setLoading(false);
       }
@@ -470,6 +487,119 @@ function InterviewContent() {
             Return to Candidate Portal
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Access Denied: Malpractice Disqualification Guard
+  if (accessDeniedType === 'malpractice') {
+    return (
+      <div className="max-w-2xl mx-auto my-12 p-8 rounded-3xl bg-red-50 border-2 border-red-300 shadow-xl text-center space-y-5 animate-fadeIn">
+        <div className="w-16 h-16 rounded-2xl bg-red-100 border border-red-300 flex items-center justify-center mx-auto text-red-600 shadow-sm">
+          <ShieldAlert className="w-10 h-10" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-red-950">
+            Access Denied: Disqualified for Malpractice
+          </h2>
+          <p className="text-sm text-red-700 leading-relaxed max-w-lg mx-auto">
+            {accessDeniedMessage || "You have been disqualified due to proctoring malpractice. You are strictly restricted from attending or retaking this interview."}
+          </p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border border-red-200 text-left text-xs space-y-2 text-slate-700 max-w-md mx-auto shadow-sm">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Candidate:</span>
+            <span className="font-bold text-slate-900">{candidateName}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Proctoring Status:</span>
+            <span className="font-bold text-red-600 uppercase">Disqualified (Malpractice)</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Access Policy:</span>
+            <span className="font-semibold text-slate-700">Interview Studio Permanently Locked</span>
+          </div>
+        </div>
+
+        <div className="pt-2">
+          <button
+            onClick={() => router.push('/candidate/dashboard')}
+            className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs shadow-md transition-all"
+          >
+            Return to Candidate Portal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Access Denied: Already Attended & Completed Guard
+  if (accessDeniedType === 'already_attended') {
+    const candId = typeof window !== 'undefined' ? localStorage.getItem('candidate_id') : '';
+    return (
+      <div className="max-w-2xl mx-auto my-12 p-8 rounded-3xl bg-indigo-50/90 border-2 border-indigo-200 shadow-xl text-center space-y-5 animate-fadeIn">
+        <div className="w-16 h-16 rounded-2xl bg-indigo-100 border border-indigo-300 flex items-center justify-center mx-auto text-indigo-600 shadow-sm">
+          <CheckCircle2 className="w-10 h-10" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-indigo-950">
+            Interview Already Attended & Completed
+          </h2>
+          <p className="text-sm text-indigo-800 leading-relaxed max-w-lg mx-auto">
+            {accessDeniedMessage || "You have already attended and submitted your 18-question adaptive interview. Re-attempts are not permitted."}
+          </p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border border-indigo-200 text-left text-xs space-y-2 text-slate-700 max-w-md mx-auto shadow-sm">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Candidate:</span>
+            <span className="font-bold text-slate-900">{candidateName}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Session Status:</span>
+            <span className="font-bold text-indigo-600 uppercase">Completed & Reviewed</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Evaluation:</span>
+            <span className="font-semibold text-emerald-700">Submitted to HR Review Committee</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center gap-3 pt-2">
+          {candId && (
+            <button
+              onClick={() => router.push(`/candidate/report/${candId}`)}
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-md transition-all flex items-center gap-1.5"
+            >
+              <Award className="w-4 h-4" />
+              View My Dossier & Report
+            </button>
+          )}
+          <button
+            onClick={() => router.push('/candidate/dashboard')}
+            className="px-6 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs shadow-sm transition-all"
+          >
+            Return to Candidate Portal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback Error Display
+  if (!loading && accessDeniedMessage && !currentQuestion) {
+    return (
+      <div className="max-w-md mx-auto my-12 p-8 rounded-3xl bg-slate-50 border border-slate-200 shadow-sm text-center space-y-4">
+        <AlertCircle className="w-10 h-10 text-amber-600 mx-auto" />
+        <h3 className="text-lg font-bold text-slate-900">Session Notice</h3>
+        <p className="text-xs text-slate-600 leading-relaxed">{accessDeniedMessage}</p>
+        <button
+          onClick={() => router.push('/candidate/dashboard')}
+          className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-all"
+        >
+          Return to Candidate Portal
+        </button>
       </div>
     );
   }

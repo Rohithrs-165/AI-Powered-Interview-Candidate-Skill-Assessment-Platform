@@ -124,6 +124,8 @@ export default function CandidateHomePage() {
   };
 
   const activeApp = getActiveApplication();
+  const isDisqualified = activeApp?.application_status === 'malpractice' || activeApp?.status === 'malpractice';
+  const isInterviewCompleted = activeApp && ['hr_review', 'selected', 'offered', 'completed'].includes(activeApp.application_status);
 
   if (!isAuthenticated) {
     return (
@@ -136,6 +138,21 @@ export default function CandidateHomePage() {
 
   return (
     <div className="space-y-8 py-2 pb-16">
+      {/* Disqualification Malpractice Persistent Alert Banner */}
+      {isDisqualified && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 text-red-950 shadow-sm animate-fadeIn">
+          <div className="w-12 h-12 rounded-2xl bg-red-100 border border-red-300 flex items-center justify-center text-red-600 shrink-0">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <div className="space-y-0.5">
+            <h3 className="font-bold text-sm text-red-950">Candidate Disqualified for Proctoring Malpractice</h3>
+            <p className="text-xs text-red-700 leading-relaxed">
+              Anti-cheat proctoring violations were recorded during your live evaluation session. In accordance with strict platform integrity guidelines, your profile is permanently restricted from attending or retaking technical interviews and assessments.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Welcome Card */}
       <section className="bg-white border border-slate-200 rounded-3xl p-7 sm:p-8 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -278,8 +295,38 @@ export default function CandidateHomePage() {
                 </div>
               )}
 
-              {/* If NOT_SHORTLISTED, REJECTED, or MALPRACTICE: Render primary Remove Application button */}
-              {(activeApp.match_status === 'not_shortlisted' || activeApp.application_status === 'not_shortlisted' || activeApp.application_status === 'rejected' || activeApp.application_status === 'malpractice') && (
+              {/* If MALPRACTICE: Render permanent locked status */}
+              {isDisqualified && (
+                <div className="flex items-center gap-2">
+                  <span className="px-3.5 py-1.5 rounded-xl bg-red-600 text-white font-extrabold text-xs uppercase tracking-wider shadow-sm flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4" /> DISQUALIFIED (MALPRACTICE)
+                  </span>
+                  <Link
+                    href={`/candidate/report/${candidateId}`}
+                    className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs shadow-sm transition-all"
+                  >
+                    View Dossier
+                  </Link>
+                </div>
+              )}
+
+              {/* If INTERVIEW ALREADY ATTENDED / COMPLETED: Lock and link to report */}
+              {!isDisqualified && isInterviewCompleted && (
+                <div className="flex items-center gap-2">
+                  <span className="px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Interview Completed
+                  </span>
+                  <Link
+                    href={`/candidate/report/${candidateId}`}
+                    className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-sm transition-all flex items-center gap-1"
+                  >
+                    <Award className="w-3.5 h-3.5" /> View Dossier & Report
+                  </Link>
+                </div>
+              )}
+
+              {/* If NOT_SHORTLISTED or REJECTED (non-malpractice): Render primary Remove Application button */}
+              {!isDisqualified && !isInterviewCompleted && (activeApp.match_status === 'not_shortlisted' || activeApp.application_status === 'not_shortlisted' || activeApp.application_status === 'rejected') && (
                 <button
                   onClick={() => handleRemoveApplication(activeApp.application_id)}
                   disabled={removingAppId === activeApp.application_id}
@@ -291,7 +338,7 @@ export default function CandidateHomePage() {
                 </button>
               )}
 
-              {(activeApp.application_status === 'shortlisted' || activeApp.application_status === 'assessment') && (
+              {!isDisqualified && (activeApp.application_status === 'shortlisted' || activeApp.application_status === 'assessment') && (
                 <>
                   <Link
                     href={`/candidate/assessment?appId=${activeApp.application_id}`}
@@ -318,7 +365,7 @@ export default function CandidateHomePage() {
                 </>
               )}
 
-              {activeApp.application_status === 'interview' && (
+              {!isDisqualified && !isInterviewCompleted && activeApp.application_status === 'interview' && (
                 <>
                   <Link
                     href="/candidate/interview"
@@ -407,23 +454,29 @@ export default function CandidateHomePage() {
                 </div>
 
                 <div>
-                  {isApplied ? (
+                  {isDisqualified ? (
+                    <span className="px-4 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 font-semibold text-xs inline-flex items-center gap-1.5 cursor-not-allowed">
+                      <Lock className="w-3.5 h-3.5" /> Disqualified (Malpractice)
+                    </span>
+                  ) : isApplied ? (
                     <div className="flex items-center gap-2">
                       <span className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold inline-flex items-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4" /> Applied
                       </span>
-                      <button
-                        onClick={() => {
-                          const app = applications.find((a) => a.job_id === job.job_id);
-                          if (app) handleRemoveApplication(app.application_id);
-                        }}
-                        disabled={removingAppId !== null}
-                        className="px-3 py-2 rounded-xl border border-slate-200 hover:border-rose-200 hover:bg-rose-50 text-slate-500 hover:text-rose-600 font-medium text-xs transition-all flex items-center gap-1"
-                        title="Withdraw this application"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Withdraw</span>
-                      </button>
+                      {!isInterviewCompleted && (
+                        <button
+                          onClick={() => {
+                            const app = applications.find((a) => a.job_id === job.job_id);
+                            if (app) handleRemoveApplication(app.application_id);
+                          }}
+                          disabled={removingAppId !== null}
+                          className="px-3 py-2 rounded-xl border border-slate-200 hover:border-rose-200 hover:bg-rose-50 text-slate-500 hover:text-rose-600 font-medium text-xs transition-all flex items-center gap-1"
+                          title="Withdraw this application"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Withdraw</span>
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <button
@@ -452,12 +505,18 @@ export default function CandidateHomePage() {
           <p className="text-xs text-slate-500 leading-relaxed">
             Covers Quantitative Aptitude (15m), Verbal Reasoning (5m), Role MCQs (5m), and a practical Coding Problem (30m).
           </p>
-          <Link
-            href={activeApp ? `/candidate/assessment?appId=${activeApp.application_id}` : "/candidate/assessment"}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 pt-1"
-          >
-            Open Assessment Workspace <ChevronRight className="w-4 h-4" />
-          </Link>
+          {isDisqualified ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-500 pt-1">
+              <ShieldAlert className="w-4 h-4" /> Assessment Locked (Disqualified)
+            </span>
+          ) : (
+            <Link
+              href={activeApp ? `/candidate/assessment?appId=${activeApp.application_id}` : "/candidate/assessment"}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 pt-1"
+            >
+              Open Assessment Workspace <ChevronRight className="w-4 h-4" />
+            </Link>
+          )}
         </div>
 
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
@@ -468,12 +527,25 @@ export default function CandidateHomePage() {
           <p className="text-xs text-slate-500 leading-relaxed">
             3 assessment-derived questions + 5 job description questions + 10 adaptive skill questions with real-time camera proctoring.
           </p>
-          <Link
-            href="/candidate/interview"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 pt-1"
-          >
-            Open Interview Studio <ChevronRight className="w-4 h-4" />
-          </Link>
+          {isDisqualified ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-500 pt-1">
+              <ShieldAlert className="w-4 h-4" /> Interview Studio Locked (Disqualified)
+            </span>
+          ) : isInterviewCompleted ? (
+            <Link
+              href={`/candidate/report/${candidateId}`}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 pt-1"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Already Attended • View Dossier <ChevronRight className="w-4 h-4" />
+            </Link>
+          ) : (
+            <Link
+              href="/candidate/interview"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 pt-1"
+            >
+              Open Interview Studio <ChevronRight className="w-4 h-4" />
+            </Link>
+          )}
         </div>
       </section>
     </div>

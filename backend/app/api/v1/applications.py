@@ -21,6 +21,12 @@ def apply_for_job(req: ApplicationSubmitRequest, db: Session = Depends(get_db)):
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
 
+    if candidate.is_disqualified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Application Denied: Candidate has been disqualified due to proctoring malpractice."
+        )
+
     job = db.query(JobOpening).filter(JobOpening.job_id == req.job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job opening not found.")

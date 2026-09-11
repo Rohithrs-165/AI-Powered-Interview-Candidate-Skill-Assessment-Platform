@@ -43,35 +43,36 @@ def register(candidate_in: CandidateCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(candidate)
 
-    # 2. Create Authentication record with initial unverified status and 6-digit OTP
+    # 2. Create Authentication record with verified status
     generated_otp = str(random.randint(100000, 999999))
     auth_rec = Authentication(
         candidate_id=candidate.candidate_id,
         email=candidate.email,
         password_hash=hashed_pwd,
         otp=generated_otp,
-        is_verified=False,
+        is_verified=True,
         last_login=datetime.now(timezone.utc)
     )
     db.add(auth_rec)
     db.commit()
 
-    # 3. Dispatch OTP email asynchronously in background thread (<30ms API response time)
+    # 3. Dispatch Welcome email asynchronously in background thread (<30ms API response time)
     threading.Thread(
         target=email_service.send_otp_email,
         args=(candidate.email, candidate.full_name, generated_otp),
         daemon=True
     ).start()
 
-    # 4. Require 2-step verification step
+    # 4. Issue authenticated access token immediately for seamless candidate onboarding
+    token = create_access_token(subject=candidate.candidate_id, role="candidate")
     return TokenResponse(
-        access_token="",
+        access_token=token,
         token_type="bearer",
         candidate=CandidateOut.model_validate(candidate),
         role="candidate",
-        requires_otp=True,
+        requires_otp=False,
         email=candidate.email,
-        message="A 6-digit verification code has been dispatched to your email."
+        message="Registration successful. Welcome to Neurova AI!"
     )
 
 @router.post("/login", response_model=TokenResponse)

@@ -67,6 +67,87 @@ def start_interview(
         if job_obj:
             job_title = job_obj.job_title
 
+    # GUARD 1: Malpractice Disqualification Check
+    candidate_obj = db.query(Candidate).filter(Candidate.candidate_id == target_cand_id).first()
+    has_malpractice_log = db.query(MalpracticeLog).filter(MalpracticeLog.candidate_id == target_cand_id).first()
+    has_malpractice_interview = db.query(Interview).filter(
+        Interview.candidate_id == target_cand_id,
+        Interview.status == "malpractice"
+    ).first()
+    has_malpractice_session = db.query(AssessmentSession).filter(
+        AssessmentSession.candidate_id == target_cand_id,
+        AssessmentSession.status == "malpractice"
+    ).first()
+
+    if (candidate_obj and candidate_obj.is_disqualified) or has_malpractice_log or has_malpractice_interview or has_malpractice_session:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: You have been disqualified due to proctoring malpractice. You are not permitted to attend or retake this interview."
+        )
+
+    # GUARD 2: Already Attended / Completed Interview Check
+    completed_interview = db.query(Interview).filter(
+        Interview.candidate_id == target_cand_id,
+        Interview.status.in_(["completed", "reviewed", "passed", "selected", "rejected"])
+    ).first()
+
+    if completed_interview:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access Denied: You have already attended and completed this interview. Re-attempts are strictly not permitted."
+        )
+
+    # Check if candidate has an active in-progress session to resume
+    existing_in_progress = db.query(Interview).filter(
+        Interview.candidate_id == target_cand_id,
+        Interview.status == "in_progress"
+    ).order_by(Interview.started_at.desc()).first()
+
+    if existing_in_progress:
+        ans_count = db.query(Answer).filter(Answer.interview_id == existing_in_progress.interview_id).count()
+        if ans_count >= MAX_INTERVIEW_QUESTIONS:
+            existing_in_progress.status = "completed"
+            existing_in_progress.completed_at = datetime.now(timezone.utc)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access Denied: You have already attended and completed all 18 interview questions. Re-attempts are strictly not permitted."
+            )
+        
+        # Resume the latest question
+        latest_question = db.query(Question).filter(
+            Question.interview_id == existing_in_progress.interview_id
+        ).order_by(Question.question_order.desc()).first()
+
+        if latest_question:
+            has_ans = db.query(Answer).filter(
+                Answer.interview_id == existing_in_progress.interview_id,
+                Answer.question_id == latest_question.question_id
+            ).first()
+            if not has_ans:
+                audio_tts_url = ""
+                if existing_in_progress.interview_mode == "voice":
+                    audio_tts_url = speech_service.text_to_speech_base64(latest_question.question_text)
+                return {
+                    "interview_id": existing_in_progress.interview_id,
+                    "job_id": existing_in_progress.job_id,
+                    "candidate_name": candidate_obj.full_name if candidate_obj else "Candidate",
+                    "status": "in_progress",
+                    "interview_mode": existing_in_progress.interview_mode,
+                    "integrity_score": existing_in_progress.integrity_score,
+                    "resumed": True,
+                    "current_question": {
+                        "question_id": latest_question.question_id,
+                        "question_order": latest_question.question_order,
+                        "total_questions": MAX_INTERVIEW_QUESTIONS,
+                        "question_source": latest_question.question_source,
+                        "question_text": latest_question.question_text,
+                        "skill_area": latest_question.skill_area,
+                        "difficulty_level": latest_question.difficulty_level,
+                        "audio_tts_url": audio_tts_url
+                    }
+                }
+
     # 1. Create Interview record
     interview = Interview(
         candidate_id=target_cand_id,
@@ -209,6 +290,9 @@ def terminate_interview_malpractice(
         app.match_reasoning = "Disqualified: Exceeded 3 proctoring malpractice attempts during live AI interview."
 
     candidate = db.query(Candidate).filter(Candidate.candidate_id == interview.candidate_id).first()
+    if candidate:
+        candidate.is_disqualified = True
+        candidate.disqualification_reason = "Disqualified: Exceeded 3 proctoring malpractice attempts during live interview."
     cand_name = candidate.full_name if candidate else "Candidate"
 
     v_count = req.violation_count if req else 4

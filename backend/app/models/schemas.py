@@ -27,6 +27,8 @@ class Candidate(Base):
     education = Column(String(255), nullable=True) # e.g. 'B.Tech in Computer Science'
     certifications = Column(Text, nullable=True) # e.g. 'AWS Certified Developer, CKA'
     internship_details = Column(Text, nullable=True) # Internship highlights
+    is_disqualified = Column(Boolean, default=False)
+    disqualification_reason = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=get_utc_now)
     updated_at = Column(DateTime, default=get_utc_now, onupdate=get_utc_now)
 
